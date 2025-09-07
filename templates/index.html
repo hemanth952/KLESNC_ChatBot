@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>College Chatbot</title>
+  <style>
+    /* 🔹 Your original CSS kept unchanged */
+    body {
+      font-family: Arial, sans-serif;
+      background: url("{{ url_for('static', filename='img/bg.jpg') }}") no-repeat center center fixed;
+      background-size: cover;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      position: relative;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.6);
+      z-index: -1;
+    }
+    .container {
+      width: 400px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
+      overflow: hidden;
+    }
+    .header {
+      background: #075e54;
+      color: white;
+      padding: 15px;
+      text-align: center;
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .header img { height: 30px; }
+    .form-container { padding: 20px; }
+    .form-container input, .form-container select, .form-container button {
+      width: 100%; padding: 10px; margin: 8px 0;
+      border-radius: 5px; border: 1px solid #ccc; font-size: 14px;
+    }
+    .form-container button {
+      background: #075e54; color: white; border: none; cursor: pointer;
+    }
+    .form-container button:hover { background: #0a6d63; }
+    .chat-container { display: none; flex-direction: column; height: 500px; }
+    .chat-box { flex: 1; padding: 15px; overflow-y: auto; position: relative; }
+    .chat-box::before {
+      content: ""; position: absolute; inset: 0;
+      background: url("{{ url_for('static', filename='img/klesnc_logo.png') }}") no-repeat center;
+      background-size: 60%; opacity: 0.12; pointer-events: none;
+    }
+    .message {
+      margin: 10px 0; padding: 10px; max-width: 80%; line-height: 1.4;
+      position: relative; z-index: 1; animation: slideIn 0.3s ease-in-out;
+    }
+    .user { background: #dcf8c6; border-radius: 8px 0px 8px 8px; margin-left: auto; }
+    .bot { background: #ffffff; border-radius: 0px 8px 8px 8px; margin-right: auto; border: 1px solid #ddd; }
+    .typing { font-style: italic; color: gray; margin: 10px 0; display: flex; gap: 3px; }
+    .dot { width: 6px; height: 6px; background: gray; border-radius: 50%; animation: blink 1.4s infinite both; }
+    .dot:nth-child(2) { animation-delay: 0.2s; }
+    .dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%{opacity:0.2;}20%{opacity:1;}100%{opacity:0.2;} }
+    .input-area { display: flex; border-top: 1px solid #ddd; }
+    .input-area input { flex: 1; border: none; padding: 15px; font-size: 14px; outline: none; }
+    .input-area button { background: #075e54; border: none; color: white; padding: 15px; cursor: pointer; }
+    .input-area button:hover { background: #0a6d63; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(10px);} to{opacity:1;transform:translateY(0);} }
+    .modal { display: none; position: fixed; z-index: 100; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+    .modal-content { background-color: #fff; padding: 20px; border-radius: 8px; text-align: center; width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .modal-content p { margin-bottom: 15px; font-size: 14px; color: #333; }
+    .modal-content button { padding: 8px 15px; background: #075e54; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    .modal-content button:hover { background: #0a6d63; }
+
+    /* New CSS for the CSV link */
+    .view-csv-link {
+        position: absolute;
+        bottom: 20px;
+        color: #fff;
+        font-weight: bold;
+        text-decoration: none;
+        background: #075e54;
+        padding: 10px 20px;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        z-index: 2; /* To ensure it's on top */
+    }
+    .view-csv-link:hover {
+        background: #0a6d63;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <a href="https://yourcollegewebsite.com" target="_blank">
+        <img src="{{ url_for('static', filename='img/klesnc_logo.png') }}" alt="College Logo">
+      </a>
+      🎓KLESNC College Chatbot
+    </div>
+
+    <div class="form-container" id="student-form">
+      <input type="text" id="name" placeholder="Enter your name" required onkeydown="focusNext(event, 'pu_marks')">
+      <input type="text" id="pu_marks" placeholder="Enter your PU marks" required onkeydown="focusNext(event, 'mobile')">
+      <input type="text" id="mobile" placeholder="Enter your mobile number" required onkeydown="focusNext(event, 'course')">
+      <select id="course" onkeydown="focusNext(event, 'start-btn')">
+        <option value="">Select Course Interest</option>
+        <option>BCA</option><option>BBA</option><option>MBA</option><option>MCA</option>
+        <option>BHM</option><option>B.Sc (Fashion & Apparel Design)</option>
+        <option>B.Com (Tourism & Travel Management)</option><option>BTTM</option>
+        <option>BA</option><option>M.Com</option><option>M.Sc</option>
+        <option>MTA</option><option>Master of Tourism & Travel Management</option><option>Diploma</option>
+      </select>
+      <button id="start-btn" onclick="startChat()">Start Chat</button>
+    </div>
+
+    <div class="chat-container" id="chat-container">
+      <div class="chat-box" id="chat-box"></div>
+      <div class="input-area">
+        <input type="text" id="user-input" placeholder="Type your message..." onkeypress="handleKey(event)">
+        <button onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+
+    <div id="error-modal" class="modal">
+      <div class="modal-content">
+        <p id="error-text"></p>
+        <button onclick="closeModal()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 🔹 Added audio elements -->
+  <audio id="userSound" src="{{ url_for('static', filename='sound/user_message.mp3') }}"></audio>
+  <audio id="botSound" src="{{ url_for('static', filename='sound/bot_reply.mp3') }}"></audio>
+
+  <script>
+    let studentInfo = {};
+
+    function focusNext(event, nextId) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const nextElement = document.getElementById(nextId);
+        if (nextElement) {
+          if (nextElement.tagName === "BUTTON") nextElement.click();
+          else nextElement.focus();
+        }
+      }
+    }
+
+    function showModal(message) {
+      document.getElementById("error-text").innerText = message;
+      document.getElementById("error-modal").style.display = "flex";
+    }
+    function closeModal() {
+      document.getElementById("error-modal").style.display = "none";
+    }
+
+    // 🔹 Detect course type and update placeholder
+    document.getElementById("course").addEventListener("change", function () {
+      const course = this.value;
+      const puInput = document.getElementById("pu_marks");
+      const mastersCourses = [
+        "MBA","MCA","M.Com","M.Sc","MTA","Master of Tourism & Travel Management"
+      ];
+      if (mastersCourses.includes(course)) {
+        puInput.placeholder = "Enter your UG % or CGPA";
+      } else {
+        puInput.placeholder = "Enter your PU marks";
+      }
+    });
+
+    // 🔹 Updated startChat() with validation for UG %/CGPA
+    function startChat() {
+      const name = document.getElementById("name").value.trim();
+      const pu_marks = document.getElementById("pu_marks").value.trim();
+      const mobile = document.getElementById("mobile").value.trim();
+      const course = document.getElementById("course").value;
+
+      if (!name || !pu_marks || !mobile || !course) {
+        showModal("Please fill all fields!");
+        return;
+      }
+      if (!/^[A-Za-z ]+$/.test(name)) {
+        showModal("Please enter a valid name (letters only).");
+        return;
+      }
+
+      const mastersCourses = [
+        "MBA","MCA","M.Com","M.Sc","MTA","Master of Tourism & Travel Management"
+      ];
+      if (mastersCourses.includes(course)) {
+        if (/^\d+(\.\d+)?$/.test(pu_marks)) {
+          const value = parseFloat(pu_marks);
+          if (!((value >= 0 && value <= 100) || (value >= 0 && value <= 10))) {
+            showModal("Please enter valid UG % (0–100) or CGPA (0–10).");
+            return;
+          }
+        } else {
+          showModal("Please enter numeric value for UG % or CGPA.");
+          return;
+        }
+      } else {
+        if (isNaN(pu_marks) || pu_marks < 0 || pu_marks > 625) {
+          showModal("Please enter valid PU marks (0–625).");
+          return;
+        }
+      }
+
+      if (!/^[0-9]{10}$/.test(mobile)) {
+        showModal("Please enter valid 10-digit mobile number.");
+        return;
+      }
+
+      studentInfo = { user_name: name, pu_marks, mobile_number: mobile, course_interest: course };
+
+      fetch("/save_info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(studentInfo)
+      });
+
+      document.getElementById("student-form").style.display = "none";
+      document.getElementById("chat-container").style.display = "flex";
+
+      const chatBox = document.getElementById("chat-box");
+      const botMessage = document.createElement("div");
+      botMessage.classList.add("message", "bot");
+
+      let marksLabel = "PU Marks";
+      if (mastersCourses.includes(course)) {
+        const value = parseFloat(pu_marks);
+        if (value <= 10) {
+          marksLabel = "CGPA";
+        } else {
+          marksLabel = "UG Percentage";
+        }
+      }
+
+      botMessage.innerHTML =
+        `👋 Hello <b>${studentInfo.user_name}</b>, welcome to KLESNC College Chatbot!<br>
+         I see your <b>${marksLabel}</b> is <b>${studentInfo.pu_marks}</b> and you are interested in <b>${studentInfo.course_interest}</b>. 🎓<br>
+         How can I assist you today?('Say Hii👋')`;
+      chatBox.appendChild(botMessage);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      // ✅ Play bot sound for welcome
+      document.getElementById("botSound").currentTime = 0;
+      document.getElementById("botSound").play();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById("user-input");
+      const chatBox = document.getElementById("chat-box");
+      const message = input.value.trim();
+      if (!message) return;
+
+      const userDiv = document.createElement("div");
+      userDiv.className = "message user";
+      userDiv.innerText = message;
+      chatBox.appendChild(userDiv);
+
+      // ✅ Play user sound
+      document.getElementById("userSound").currentTime = 0;
+      document.getElementById("userSound").play();
+
+      const typingDiv = document.createElement("div");
+      typingDiv.className = "typing";
+      typingDiv.id = "typing";
+      typingDiv.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+      chatBox.appendChild(typingDiv);
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      input.value = "";
+
+      const response = await fetch("/get_response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...studentInfo, message })
+      });
+      const data = await response.json();
+
+      setTimeout(() => {
+        document.getElementById("typing").remove();
+        const botDiv = document.createElement("div");
+        botDiv.className = "message bot";
+        botDiv.innerText = data.response;
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+
+        // ✅ Play bot sound
+        document.getElementById("botSound").currentTime = 0;
+        document.getElementById("botSound").play();
+      }, 1200);
+    }
+
+    function handleKey(event) {
+      if (event.key === "Enter") sendMessage();
+    }
+  </script>
+</body>
+</html>

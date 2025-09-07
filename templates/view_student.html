@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Student Data</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background: #b0e5e4; color: white; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        h2 { text-align: center; margin-bottom: 20px; }
+        .no-data { text-align: center; color: #888; margin-top: 50px; }
+    </style>
+</head>
+<body>
+
+    <h2>Student Information</h2>
+
+    {% if students %}
+    <table>
+        <thead>
+            <tr>
+                <th>Timestamp</th>
+                <th>Name</th>
+                <th>Academic Info</th>
+                <th>Mobile</th>
+                <th>Course</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in students %}
+            <tr>
+                <td>{{ s["Timestamp"] }}</td>
+                <td>{{ s["Name"] }}</td>
+                <!-- Academic Info: show PU Marks if exists, else UG Percentage -->
+                <td>
+                    {% if s["PU Marks"] %}
+                        {{ s["PU Marks"] }}
+                    {% elif s["UG Percentage/CGPA"] %}
+                        {{ s["UG Percentage/CGPA"] }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </td>
+                <td>{{ s["Mobile"] }}</td>
+                <td>{{ s["Course"] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="no-data">No student data found yet. Please save some information first.</p>
+    {% endif %}
+
+</body>
+</html>
