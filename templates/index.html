@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>College Chatbot</title>
   <style>
-    /* 🔹 Your original CSS kept unchanged */
     body {
       font-family: Arial, sans-serif;
       background: url("{{ url_for('static', filename='img/bg.jpg') }}") no-repeat center center fixed;
@@ -26,13 +25,19 @@
       background: rgba(0, 0, 0, 0.6);
       z-index: -1;
     }
+
+    /* 🔹 Modified for full screen */
     .container {
-      width: 400px;
+      width: 100%;
+      max-width: 500px;
+      height: 100vh;
       background: #fff;
-      border-radius: 10px;
-      box-shadow: 0px 4px 12px rgba(0,0,0,0.2);
-      overflow: hidden;
+      border-radius: 0;
+      box-shadow: none;
+      display: flex;
+      flex-direction: column;
     }
+
     .header {
       background: #075e54;
       color: white;
@@ -54,7 +59,8 @@
       background: #075e54; color: white; border: none; cursor: pointer;
     }
     .form-container button:hover { background: #0a6d63; }
-    .chat-container { display: none; flex-direction: column; height: 500px; }
+
+    .chat-container { display: none; flex-direction: column; flex: 1; }
     .chat-box { flex: 1; padding: 15px; overflow-y: auto; position: relative; }
     .chat-box::before {
       content: ""; position: absolute; inset: 0;
@@ -83,7 +89,6 @@
     .modal-content button { padding: 8px 15px; background: #075e54; color: white; border: none; border-radius: 5px; cursor: pointer; }
     .modal-content button:hover { background: #0a6d63; }
 
-    /* New CSS for the CSV link */
     .view-csv-link {
         position: absolute;
         bottom: 20px;
@@ -94,10 +99,18 @@
         padding: 10px 20px;
         border-radius: 5px;
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        z-index: 2; /* To ensure it's on top */
+        z-index: 2;
     }
     .view-csv-link:hover {
         background: #0a6d63;
+    }
+
+    /* 🔹 Mobile full screen */
+    @media (max-width: 768px) {
+      .container {
+        max-width: 100%;
+        border-radius: 0;
+      }
     }
   </style>
 </head>
@@ -141,7 +154,6 @@
     </div>
   </div>
 
-  <!-- 🔹 Added audio elements -->
   <audio id="userSound" src="{{ url_for('static', filename='sound/user_message.mp3') }}"></audio>
   <audio id="botSound" src="{{ url_for('static', filename='sound/bot_reply.mp3') }}"></audio>
 
@@ -167,7 +179,6 @@
       document.getElementById("error-modal").style.display = "none";
     }
 
-    // 🔹 Detect course type and update placeholder
     document.getElementById("course").addEventListener("change", function () {
       const course = this.value;
       const puInput = document.getElementById("pu_marks");
@@ -181,7 +192,6 @@
       }
     });
 
-    // 🔹 Updated startChat() with validation for UG %/CGPA
     function startChat() {
       const name = document.getElementById("name").value.trim();
       const pu_marks = document.getElementById("pu_marks").value.trim();
@@ -255,7 +265,6 @@
       chatBox.appendChild(botMessage);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // ✅ Play bot sound for welcome
       document.getElementById("botSound").currentTime = 0;
       document.getElementById("botSound").play();
     }
@@ -271,7 +280,6 @@
       userDiv.innerText = message;
       chatBox.appendChild(userDiv);
 
-      // ✅ Play user sound
       document.getElementById("userSound").currentTime = 0;
       document.getElementById("userSound").play();
 
@@ -299,7 +307,6 @@
         chatBox.appendChild(botDiv);
         chatBox.scrollTop = chatBox.scrollHeight;
 
-        // ✅ Play bot sound
         document.getElementById("botSound").currentTime = 0;
         document.getElementById("botSound").play();
       }, 1200);
