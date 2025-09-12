@@ -1,4 +1,4 @@
-c<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -99,12 +99,31 @@ c<!DOCTYPE html>
     .view-csv-link:hover {
         background: #0a6d63;
     }
+
+    /* 🔹 Style for mic button */
+    #micBtn {
+      background: #ff3b30;
+      border: none;
+      color: white;
+      padding: 0 20px;
+      cursor: pointer;
+      font-size: 18px;
+    }
+    #micBtn.listening {
+      background: #d32f2f;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <a href="https://yourcollegewebsite.com" target="_blank">
+      <a href="https://klesnc.org" target="_blank">
         <img src="{{ url_for('static', filename='img/klesnc_logo.png') }}" alt="College Logo">
       </a>
       🎓KLESNC College Chatbot
@@ -130,6 +149,8 @@ c<!DOCTYPE html>
       <div class="input-area">
         <input type="text" id="user-input" placeholder="Type your message..." onkeypress="handleKey(event)">
         <button onclick="sendMessage()">Send</button>
+        <!-- 🔹 Added mic button -->
+        <button id="micBtn">🎤</button>
       </div>
     </div>
 
@@ -147,6 +168,67 @@ c<!DOCTYPE html>
 
   <script>
     let studentInfo = {};
+
+    // --- NEW: track current playback so we can stop it on new reply or when mic starts
+    let currentAudio = null;       // HTMLAudioElement for backend-generated MP3
+    let currentUtterance = null;   // SpeechSynthesisUtterance for browser TTS
+
+    function stopAllPlayback() {
+      // stop any backend audio
+      if (currentAudio) {
+        try { currentAudio.pause(); currentAudio.currentTime = 0; } catch(e) {}
+        currentAudio = null;
+      }
+      // stop browser TTS
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.cancel(); } catch(e) {}
+        currentUtterance = null;
+      }
+    }
+
+    /* ✅ Bot Speech Synthesis (fallback) */
+    function speakBotReply(text) {
+      if (!text) return;
+      if ('speechSynthesis' in window) {
+        // cancel any existing TTS
+        try { window.speechSynthesis.cancel(); } catch(e) {}
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = "en-IN"; 
+        utterance.rate = 1;  
+        utterance.pitch = 1;
+        currentUtterance = utterance;
+        window.speechSynthesis.speak(utterance);
+        utterance.onend = () => { currentUtterance = null; };
+      }
+    }
+
+    /* Play backend audio if provided, otherwise fallback to browser TTS */
+    function playBotAudioOrSpeak(text, audioUrl) {
+      stopAllPlayback();
+      if (audioUrl) {
+        try {
+          currentAudio = new Audio(audioUrl);
+          currentAudio.preload = 'auto';
+          // if audio playback fails, fallback to TTS
+          currentAudio.onerror = () => {
+            console.warn("Playback failed for backend audio, falling back to TTS.");
+            currentAudio = null;
+            speakBotReply(text);
+          };
+          currentAudio.onended = () => { currentAudio = null; };
+          currentAudio.play().catch((err) => {
+            console.warn("Audio play error:", err);
+            currentAudio = null;
+            speakBotReply(text);
+          });
+        } catch (e) {
+          console.warn("Error creating audio element:", e);
+          speakBotReply(text);
+        }
+      } else {
+        speakBotReply(text);
+      }
+    }
 
     function focusNext(event, nextId) {
       if (event.key === "Enter") {
@@ -181,7 +263,7 @@ c<!DOCTYPE html>
       }
     });
 
-    // 🔹 Updated startChat() with validation for UG %/CGPA
+    // 🔹 Updated startChat() with validation for UG %/CGPA (kept exactly as your original logic)
     function startChat() {
       const name = document.getElementById("name").value.trim();
       const pu_marks = document.getElementById("pu_marks").value.trim();
@@ -203,6 +285,7 @@ c<!DOCTYPE html>
       if (mastersCourses.includes(course)) {
         if (/^\d+(\.\d+)?$/.test(pu_marks)) {
           const value = parseFloat(pu_marks);
+          // Accept UG % (0-100) or CGPA (0-10)
           if (!((value >= 0 && value <= 100) || (value >= 0 && value <= 10))) {
             showModal("Please enter valid UG % (0–100) or CGPA (0–10).");
             return;
@@ -212,7 +295,8 @@ c<!DOCTYPE html>
           return;
         }
       } else {
-        if (isNaN(pu_marks) || pu_marks < 0 || pu_marks > 625) {
+        // For PU marks accept numeric including decimals, range 0-625
+        if (!/^\d+(\.\d+)?$/.test(pu_marks) || parseFloat(pu_marks) < 0 || parseFloat(pu_marks) > 625) {
           showModal("Please enter valid PU marks (0–625).");
           return;
         }
@@ -255,9 +339,10 @@ c<!DOCTYPE html>
       chatBox.appendChild(botMessage);
       chatBox.scrollTop = chatBox.scrollHeight;
 
-      // ✅ Play bot sound for welcome
+      // ✅ Play bot sound for welcome (leave as-is)
       document.getElementById("botSound").currentTime = 0;
       document.getElementById("botSound").play();
+      // (Do not auto-speak welcome; keep behavior unchanged)
     }
 
     async function sendMessage() {
@@ -289,26 +374,75 @@ c<!DOCTYPE html>
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...studentInfo, message })
       });
-      const data = await response.json();
+
+      // handle network error gracefully
+      let data;
+      try {
+        data = await response.json();
+      } catch (e) {
+        document.getElementById("typing").remove();
+        const botDiv = document.createElement("div");
+        botDiv.className = "message bot";
+        botDiv.innerText = "⚠ Error: could not get response from server.";
+        chatBox.appendChild(botDiv);
+        chatBox.scrollTop = chatBox.scrollHeight;
+        return;
+      }
 
       setTimeout(() => {
-        document.getElementById("typing").remove();
+        // remove typing indicator
+        const t = document.getElementById("typing");
+        if (t) t.remove();
+
         const botDiv = document.createElement("div");
         botDiv.className = "message bot";
         botDiv.innerText = data.response;
         chatBox.appendChild(botDiv);
         chatBox.scrollTop = chatBox.scrollHeight;
 
-        // ✅ Play bot sound
+        // ✅ Play bot sound notification
         document.getElementById("botSound").currentTime = 0;
         document.getElementById("botSound").play();
+
+        // --- NEW: play backend audio if present, else fallback to TTS ---
+        // data.audio expected like "/static/voice/<file>.mp3"
+        playBotAudioOrSpeak(data.response, data.audio);
+
       }, 1200);
     }
 
     function handleKey(event) {
       if (event.key === "Enter") sendMessage();
     }
+
+    /* 🔹 Voice input with Web Speech API */
+    const micBtn = document.getElementById("micBtn");
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-IN"; // Indian English
+      recognition.interimResults = false;
+
+      micBtn.addEventListener("click", () => {
+        // stop any playback while user speaks
+        stopAllPlayback();
+        recognition.start();
+        micBtn.classList.add("listening");
+      });
+
+      recognition.onresult = (event) => {
+        const userSpeech = event.results[0][0].transcript;
+        document.getElementById("user-input").value = userSpeech;
+        sendMessage();
+      };
+
+      recognition.onend = () => {
+        micBtn.classList.remove("listening");
+      };
+    } else {
+      micBtn.style.display = "none"; // hide if not supported
+      console.warn("SpeechRecognition not supported in this browser.");
+    }
   </script>
 </body>
 </html>
-
