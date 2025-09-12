@@ -1,15 +1,13 @@
 from flask import Flask, render_template, request, jsonify
 import csv
 from datetime import datetime
-import spacy
+import re
 
 app = Flask(__name__)
 
-# Load spaCy model
-nlp = spacy.load("en_core_web_sm")
-
+# ---------------- DATA ---------------- #
 # Principal Info
-principal_info = "Dr. B. A. Vishwanath – Principal, M.Sc, Ph.D."
+principal_info = "Dr. Arunkumar B. Sonappanavar – Principal, M.Sc, Ph.D."
 
 # BCA Teachers
 bca_teachers = [
@@ -19,7 +17,7 @@ bca_teachers = [
     {"name": "Ms. Preetha Sarathy P", "qualification": "MCA, 2.5 years experience"},
     {"name": "Mrs. Veena Revadi", "qualification": "M.Sc, 12 years experience"},
     {"name": "Ms. Sahana J K", "qualification": "MCA, 2 years experience (Project In-charge)"},
-    {"name": "Mr. Pradeep B", "qualification": "MCA, 2 years experience (Placement Coordinator)"},  # ✅ Fixed comma
+    {"name": "Mr. Pradeep B", "qualification": "MCA, 2 years experience (Placement Coordinator)"},
     {"name": "Mrs. Pranatheertha Jagadhish Aradhya", "qualification": "M.Sc, 25 years experience"},
     {"name": "Mrs. Madalambika K C", "qualification": "M.Sc, 2 years experience"},
     {"name": "Ms. Swetha Bai", "qualification": "M.Sc, 1 year experience"},
@@ -40,102 +38,167 @@ bba_teachers = [
     {"name": "Mr. Sohan Balaji", "qualification": "MBA, Assistant Professor"}
 ]
 
-# NLP intent matcher using spaCy
-def match_intent(user_input, keywords):
-    doc1 = nlp(user_input)
-    for keyword in keywords:
-        doc2 = nlp(keyword)
-        if doc1.similarity(doc2) > 0.75:  # spaCy similarity
-            return True
-        if keyword in user_input:  # fallback exact match
-            return True
-    return False
+# ---------------- INTENT PATTERNS ---------------- #
+patterns = {
+    "greet": re.compile(r'\b(hello|hi|hey|welcome)\b', re.I),
+    "help": re.compile(r'\b(help|options|what can you do)\b', re.I),
+    "principal": re.compile(r'\b(principal|head of college|hod)\b', re.I),
+    "courses": re.compile(r'\b(courses|programs|departments|offerings)\b', re.I),
+    "facilities": re.compile(r'\b(facilities|infrastructure|campus|labs|library|auditorium)\b', re.I),
+    "achievements": re.compile(r'\b(achievement|achievements|accreditation|naac|rank|ranking|award|awards)\b', re.I),
+    "placements": re.compile(r'\b(placement|placements|jobs|recruitment|career)\b', re.I),
+    "fees": re.compile(r'\b(fee|fees|fee structure|cost|tuition)\b', re.I),
+    "student_life": re.compile(r'\b(student life|extracurricular|fest|festival|clubs|nss|ncc|sports)\b', re.I),
 
-# Chatbot Logic
+    # 👇 Put specific teacher patterns BEFORE general teachers
+    "bca_teachers": re.compile(r'\b(bca teachers|bca faculty)\b', re.I),
+    "bba_teachers": re.compile(r'\b(bba teachers|bba faculty)\b', re.I),
+    "teachers": re.compile(r'\b(teachers|faculty|staff|professor|lecturer)\b', re.I),
+
+    "contact": re.compile(r'\b(contact|address|location|phone|email)\b', re.I),
+    "exit": re.compile(r'\b(exit|quit|bye|goodbye)\b', re.I),
+}
+
+# ---------------- RESPONSES ---------------- #
+responses = {
+    "greet": "👋 Hello! I am the chatbot for *KLE Society's S. Nijalingappa College (KLESNC)*. How can I help you? (Type 'help' for options)",
+    
+    "help": (
+        "📌 You can ask me about:\n"
+        "- Principal\n"
+        "- Courses\n"
+        "- Facilities\n"
+        "- Achievements\n"
+        "- Placements\n"
+        "- Fees\n"
+        "- Teachers / Faculty (BCA or BBA)\n"
+        "- Student Life\n"
+        "- Contact\n"
+        ""
+        "Or type 'exit' to quit."
+    ),
+    
+    "principal": f"🎓 Our Principal is *{principal_info}*.",
+    
+    "courses": (
+        "📚 Courses Offered:\n"
+        "- BCA (Computer Applications)\n"
+        "- BBA (Business Administration)\n"
+        "- B.Com (Commerce)\n"
+        "- B.Sc (Science combinations)\n"
+        "- BA (Arts)\n"
+        "- MCA (Computer Applications - PG)\n"
+        "- M.Com (Commerce - PG)\n"
+        "- MA (English)\n"
+        "- MSc (Biotech, Mathematics, etc.)"
+    ),
+    
+    "facilities": (
+        "🏫 Facilities:\n"
+        ">ICT Enabled Classrooms & Labs\n"
+        "> Digitalized, well-stacked library with ILMS spread across three floors\n"
+        "> AV-Studio Facility\n"
+        "> Women Anti-Harassment & Grievance Redressal Cell\n"
+        "> Campus Health Centre\n"
+        "> Bank\n"
+        "> Cafeteria\n"
+        "> Lounge for Girl Students\n"
+        "> Auditoriums & Open-Air Theatre\n"
+        "> Wi-Fi Campus, Computer & Language Labs\n"
+        "> NCC, NSS, YRC, Dept Clubs,\n"
+        "> Forums & Student Council\n"
+        "> CCTV Surveillance 24/7\n"
+        "> In-House Sports Complex & Cardio\n"
+        "> Outdoor Playground & Indoor Game Facilities"
+
+    ),
+    
+    "achievements": (
+        "🏅 Achievements:\n"
+        "- NAAC Accredited with 'A' Grade\n"
+        "- Ranked among top colleges under Bengaluru City University\n"
+        "- Award-winning research and student projects\n"
+        "- Active NSS, NCC, and cultural participation\n"
+        "- Alumni excelling in IT, Business, and Government sectors"
+    ),
+    
+    "placements": (
+        "💼 Placements:\n"
+        "- Dedicated Placement Cell with strong industry ties\n"
+        "- Companies like Infosys, Wipro, TCS, Accenture visit for recruitment\n"
+        "- Training in Aptitude, Soft Skills, and Interview Preparation\n"
+        "- Internship opportunities for UG & PG students"
+    ),
+    
+    "fees": (
+        "💰 Fee Structure (approx per year):\n"
+        "- BCA: ₹45,000 – ₹55,000\n"
+        "- BBA: ₹40,000 – ₹50,000\n"
+        "- B.Com: ₹30,000 – ₹40,000\n"
+        "- BA / B.Sc: ₹25,000 – ₹35,000\n"
+        "- PG Programs (MCA, M.Com, MSc, MA): ₹50,000 – ₹70,000\n"
+        "👉 For exact details, please contact the college office."
+    ),
+    
+    "teachers": (
+        "👩‍🏫 Faculty at KLESNC:\n"
+        "- Highly qualified professors with MSc, MCA, MBA, and PhD degrees\n"
+        "- Experienced staff in Computer Science, Commerce, Management, Arts, and Sciences\n"
+        "- Dedicated coordinators for Placements, Clubs, and Student Development\n\n"
+        "👉 You can also ask specifically for BCA teachers or BBA teachers."
+    ),
+    
+    "contact": (
+        "📍 Contact:\n"
+        "KLE Society’s S. Nijalingappa College\n"
+        "#1040, II Block, Rajajinagar, Bangalore – 560010\n"
+        "📞 Phone: +91-80-2332XXXX\n"
+        "📧 Email: info@klesnc.edu"
+    ),
+    
+    "student_life": (
+        "🎉 Student Life:\n"
+        "- Annual cultural fest and inter-collegiate competitions\n"
+        "- NSS & NCC for social service and discipline\n"
+        "- Active student clubs (IT Club, Management Club, Cultural Club)\n"
+        "- Sports teams in cricket, basketball, football, athletics\n"
+        "- Vibrant campus life with seminars, workshops, and guest lectures"
+    ),
+    
+    "exit": "👋 Goodbye! Have a great day!",
+}
+
+# ---------------- BOT LOGIC ---------------- #
 def get_bot_response(user_input):
-    user_input = user_input.strip().lower()
-    if not user_input:
-        return "Please enter a message."
+    text = user_input.strip().lower()
+    if not text:
+        return "⚠ Please enter a message."
+    
+    matched_intents = []
+    for key, pattern in patterns.items():
+        if pattern.search(text):
+            matched_intents.append(key)
+    
+    if not matched_intents:
+        return "❓ Sorry, I don't have that information. Type 'help' to see what I can do."
 
-    if match_intent(user_input, ["hello", "hi", "hey"]):
-        return "Hello! I am a bot for KLE Society's S. Nijalingappa College. How can I help you? (Type 'help' for options)"
+    intent = matched_intents[0]
 
-    elif "help" in user_input:
-        return ("You can ask about: about college, facilities, courses, subjects, teachers, principal, achievements, "
-                "contact, placements, fees, student life, or type 'exit' to quit.")
-
-    elif match_intent(user_input, ["principal", "head of college"]):
-        return f"Our Principal is {principal_info}"
-
-    elif "bca teacher" in user_input or "bca faculty" in user_input:
-        response = "Here are some BCA faculty members with qualifications:\n"
+    if intent == "bca_teachers":
+        response = "👩‍💻 BCA Department Faculty:\n"
         for t in bca_teachers:
             response += f"- {t['name']} – {t['qualification']}\n"
-        return response
+        return response.strip()
 
-    elif "bba teacher" in user_input or "bba faculty" in user_input:
-        response = "Here are some BBA faculty members with qualifications:\n"
+    if intent == "bba_teachers":
+        response = "📊 BBA Department Faculty:\n"
         for t in bba_teachers:
             response += f"- {t['name']} – {t['qualification']}\n"
-        return response
+        return response.strip()
 
-    elif any(course in user_input for course in ["bcom", "b.sc", "bsc", "ba", "mca", "mcom", "ma", "msc"]):
-        return "The faculty for this course are well-qualified (usually holding Master’s or higher) and experienced in their subjects."
+    return responses.get(intent, "❓ Sorry, I don't have that information.")
 
-    elif match_intent(user_input, ["about college", "about nijalingappa"]):
-        return ("K.L.E. Society’s S. Nijalingappa College was established in 1963 and is known for academic excellence...")
-
-    elif match_intent(user_input, ["facilities", "infrastructure", "campus"]):
-        return ("The college campus is spread over 1.72 acres with well-equipped labs, library, auditorium, and more...")
-
-    elif match_intent(user_input, ["courses", "programs"]):
-        return ("KLESNC offers a variety of UG and PG programs including BCA, BBA, B.Com, B.Sc, BA, MCA, M.Com, MA, and MSc.")
-
-    elif "subjects" in user_input:
-        if "bca" in user_input:
-            return "The BCA program follows Bengaluru City University curriculum with Computer Science core subjects."
-        elif "bba" in user_input:
-            return "The BBA program covers Management, Accounting, Marketing, and Business Analytics."
-        elif "bcom" in user_input:
-            return "The B.Com program includes subjects like Accounting, Taxation, and Finance."
-        elif "bsc" in user_input:
-            return "The B.Sc program varies by combinations like PCM, CBZ, etc."
-        elif "ba" in user_input:
-            return "The BA program includes History, Economics, Psychology, Political Science, and Optional English."
-        elif "msc" in user_input:
-            return "The MSc program includes advanced topics in Biotechnology, Mathematics, etc."
-        elif "mca" in user_input:
-            return "The MCA program covers software engineering, AI, databases, and web development."
-        elif "mcom" in user_input:
-            return "The M.Com program covers advanced commerce, finance, and accounting topics."
-        elif "ma" in user_input:
-            return "The MA in English program includes Literature, Linguistics, and Critical Theory."
-        else:
-            return "Please specify the course (e.g., 'BCA subjects', 'BBA subjects')."
-
-    elif match_intent(user_input, ["achievements", "accreditation"]):
-        return "KLESNC is NAAC accredited with 'A' grade and has received numerous awards for academic excellence."
-
-    elif match_intent(user_input, ["placements", "placement"]):
-        return "The Placement Cell has strong industry ties and provides training and job opportunities."
-
-    elif match_intent(user_input, ["fees", "fee structure"]):
-        return "The annual fee structure varies by course. Please contact the office for details."
-
-    elif match_intent(user_input, ["student life", "extracurriculars", "clubs"]):
-        return "Student life is vibrant with cultural fests, clubs, NSS, NCC, sports, and more."
-
-    elif match_intent(user_input, ["contact", "address", "location"]):
-        return ("Contact Details:\nKLE Society’s S. Nijalingappa College\n"
-                "#1040, II Block, Rajajinagar, Bangalore – 560 010")
-
-    elif match_intent(user_input, ["exit", "quit"]):
-        return "Goodbye! Have a great day!"
-
-    else:
-        return "Sorry, I don't have that information. Please try something else or type 'help'."
-
-# Flask Routes
+# ---------------- FLASK ROUTES ---------------- #
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -183,5 +246,6 @@ def view_students():
         pass
     return render_template('view_student.html', students=students)
 
+# ---------------- RUN APP ---------------- #
 if __name__ == "__main__":
     app.run(debug=True)
