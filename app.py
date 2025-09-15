@@ -2,12 +2,15 @@ from flask import Flask, render_template, request, jsonify
 import csv
 from datetime import datetime
 import re
+import os
+import uuid
+import pyttsx3  # ✅ Replaced gTTS with pyttsx3
 
 app = Flask(__name__)
 
 # ---------------- DATA ---------------- #
 # Principal Info
-principal_info = "Dr. Arunkumar B. Sonappanavar – Principal, M.Sc, Ph.D."
+principal_info = "Dr. Arunkumar B. Sonappanavar –  M.Sc, Ph.D."
 
 # BCA Teachers
 bca_teachers = [
@@ -49,20 +52,17 @@ patterns = {
     "placements": re.compile(r'\b(placement|placements|jobs|recruitment|career)\b', re.I),
     "fees": re.compile(r'\b(fee|fees|fee structure|cost|tuition)\b', re.I),
     "student_life": re.compile(r'\b(student life|extracurricular|fest|festival|clubs|nss|ncc|sports)\b', re.I),
-
-    # 👇 Put specific teacher patterns BEFORE general teachers
+    "why_kle": re.compile(r'\b(why choose kle|why kle|advantages|benefits)\b', re.I),
     "bca_teachers": re.compile(r'\b(bca teachers|bca faculty)\b', re.I),
     "bba_teachers": re.compile(r'\b(bba teachers|bba faculty)\b', re.I),
     "teachers": re.compile(r'\b(teachers|faculty|staff|professor|lecturer)\b', re.I),
-
     "contact": re.compile(r'\b(contact|address|location|phone|email)\b', re.I),
     "exit": re.compile(r'\b(exit|quit|bye|goodbye)\b', re.I),
 }
 
 # ---------------- RESPONSES ---------------- #
 responses = {
-    "greet": "👋 Hello! I am the chatbot for *KLE Society's S. Nijalingappa College (KLESNC)*. How can I help you? (Type 'help' for options)",
-    
+    "greet": "👋 Hello! I am the chatbot for KLE Society's S. Nijalingappa College (KLESNC). How can I help you? (Type 'help' for options)",
     "help": (
         "📌 You can ask me about:\n"
         "- Principal\n"
@@ -73,13 +73,11 @@ responses = {
         "- Fees\n"
         "- Teachers / Faculty (BCA or BBA)\n"
         "- Student Life\n"
+        "- Why Choose KLE\n"
         "- Contact\n"
-        ""
-        "Or type 'exit' to quit."
+        "\nOr type 'exit' to quit."
     ),
-    
-    "principal": f"🎓 Our Principal is *{principal_info}*.",
-    
+    "principal": f"🎓 Our Principal is {principal_info}.",
     "courses": (
         "📚 Courses Offered:\n"
         "- BCA (Computer Applications)\n"
@@ -92,10 +90,9 @@ responses = {
         "- MA (English)\n"
         "- MSc (Biotech, Mathematics, etc.)"
     ),
-    
     "facilities": (
         "🏫 Facilities:\n"
-        ">ICT Enabled Classrooms & Labs\n"
+        "> ICT Enabled Classrooms & Labs\n"
         "> Digitalized, well-stacked library with ILMS spread across three floors\n"
         "> AV-Studio Facility\n"
         "> Women Anti-Harassment & Grievance Redressal Cell\n"
@@ -109,10 +106,8 @@ responses = {
         "> Forums & Student Council\n"
         "> CCTV Surveillance 24/7\n"
         "> In-House Sports Complex & Cardio\n"
-        "> Outdoor Playground & Indoor Game Facilities"
-
+        "> Outdoor Playground & Indoor Game Facilities"
     ),
-    
     "achievements": (
         "🏅 Achievements:\n"
         "- NAAC Accredited with 'A' Grade\n"
@@ -121,7 +116,6 @@ responses = {
         "- Active NSS, NCC, and cultural participation\n"
         "- Alumni excelling in IT, Business, and Government sectors"
     ),
-    
     "placements": (
         "💼 Placements:\n"
         "- Dedicated Placement Cell with strong industry ties\n"
@@ -129,17 +123,15 @@ responses = {
         "- Training in Aptitude, Soft Skills, and Interview Preparation\n"
         "- Internship opportunities for UG & PG students"
     ),
-    
     "fees": (
         "💰 Fee Structure (approx per year):\n"
-        "- BCA: ₹45,000 – ₹55,000\n"
-        "- BBA: ₹40,000 – ₹50,000\n"
-        "- B.Com: ₹30,000 – ₹40,000\n"
-        "- BA / B.Sc: ₹25,000 – ₹35,000\n"
-        "- PG Programs (MCA, M.Com, MSc, MA): ₹50,000 – ₹70,000\n"
+        "- BCA: ₹1,05,000 to ₹1,20,000\n"
+        "- BBA: ₹1,10,000 to ₹1,25,000\n"
+        "- B.Com: ₹30,000 to ₹40,000\n"
+        "- BA / B.Sc: ₹25,000 to ₹35,000\n"
+        "- PG Programs (MCA, M.Com, MSc, MA): ₹50,000 to ₹70,000\n"
         "👉 For exact details, please contact the college office."
     ),
-    
     "teachers": (
         "👩‍🏫 Faculty at KLESNC:\n"
         "- Highly qualified professors with MSc, MCA, MBA, and PhD degrees\n"
@@ -147,7 +139,6 @@ responses = {
         "- Dedicated coordinators for Placements, Clubs, and Student Development\n\n"
         "👉 You can also ask specifically for BCA teachers or BBA teachers."
     ),
-    
     "contact": (
         "📍 Contact:\n"
         "KLE Society’s S. Nijalingappa College\n"
@@ -155,7 +146,6 @@ responses = {
         "📞 Phone: +91-80-2332XXXX\n"
         "📧 Email: info@klesnc.edu"
     ),
-    
     "student_life": (
         "🎉 Student Life:\n"
         "- Annual cultural fest and inter-collegiate competitions\n"
@@ -164,7 +154,18 @@ responses = {
         "- Sports teams in cricket, basketball, football, athletics\n"
         "- Vibrant campus life with seminars, workshops, and guest lectures"
     ),
-    
+    "why_kle": (
+        "🌟 Why Choose KLE SNC?\n"
+        "- 100% Placement Assistance\n"
+        "- Skill Enhancement Short Term Courses & Certifications\n"
+        "- Pre-Placement and Soft Skills Training\n"
+        "- Internships, Projects & Field Works\n"
+        "- Institute/Industrial Visits, Study Tours & Excursions\n"
+        "- Inter & Intra-Collegiate Events: Fests, Fairs, Exhibitions & Competitions\n"
+        "- Seminars & Invited Guest Lectures\n"
+        "- Hands-on Training & Interactive Workshops\n"
+        "- Competitive Examination Coaching"
+    ),
     "exit": "👋 Goodbye! Have a great day!",
 }
 
@@ -208,7 +209,18 @@ def get_response():
     data = request.get_json()
     user_message = data.get("message", "")
     bot_reply = get_bot_response(user_message)
-    return jsonify({"response": bot_reply})
+
+    # ---------- pyttsx3 VOICE GENERATION ----------
+    engine = pyttsx3.init()
+    voices = engine.getProperty('voices')
+    engine.setProperty('voice', voices[1].id)  # Change index for male/female voices
+    engine.setProperty('rate', 170)  # Speaking speed
+
+    filename = f"static/{uuid.uuid4()}.mp3"
+    engine.save_to_file(bot_reply, filename)
+    engine.runAndWait()
+
+    return jsonify({"response": bot_reply, "voice": filename})
 
 @app.route("/save_info", methods=["POST"])
 def save_info():
